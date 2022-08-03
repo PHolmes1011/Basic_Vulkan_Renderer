@@ -108,8 +108,11 @@ private:
     bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
     void CreateSwapChain();
     void RecreateSwapChain();
-    void CreateFramebuffers();
+    void CreateFrameBuffers();
     void CreateCommandPool();
+    VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling,
+                                 VkFormatFeatureFlags features);
+    void CreateDepthResources();
     void CreateTextureImage();
     void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
     void CreateImageSampler();
@@ -137,7 +140,7 @@ private:
     VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& available_formats);
     VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& available_present_modes);
     VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-    VkImageView CreateImageViews(VkImage image, VkFormat format);
+    VkImageView CreateImageViews(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
     void CreateLogicalDevice();
     // -- Debug Functions --
     bool CheckValidationLayerSupport() const;
@@ -158,19 +161,25 @@ private:
 
     // --- Private Attributes ---
     const std::vector<Vertex> verts{
-        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-        {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-        {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-        {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+        {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+        {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+
+        {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+        {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+        {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+        {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
     };
-    VkBuffer m_vertexBuffer = nullptr;
-    VkDeviceMemory m_vertexBufferMemory;
+    VkBuffer m_vertexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory m_vertexBufferMemory = VK_NULL_HANDLE;
 
     const std::vector<uint16_t> indices = {
-		0, 1, 2, 2, 3, 0
+        0, 1, 2, 2, 3, 0,
+		4, 5, 6, 6, 7, 4
     };
-    VkBuffer m_indexBuffer = nullptr;
-    VkDeviceMemory m_indexBufferMemory;
+    VkBuffer m_indexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory m_indexBufferMemory = VK_NULL_HANDLE;
 
     struct UniformBufferObject {
         glm::mat4 model;
@@ -181,20 +190,24 @@ private:
     std::vector<VkBuffer> m_uniformBuffers;
     std::vector<VkDeviceMemory> m_uniformMemory;
 
-    VkDescriptorPool m_descriptorPool;
+    VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> m_descriptorSets;
 
     VkImage m_textImage;           // A specialised buffer for images (faster accessing times)
-    VkDeviceMemory m_textMemory;
-    VkImageView m_textImgView;
-    VkSampler m_textureSampler;
+    VkDeviceMemory m_textMemory = VK_NULL_HANDLE;
+    VkImageView m_textImgView = VK_NULL_HANDLE;
+    VkSampler m_textureSampler = VK_NULL_HANDLE;
     bool m_AnisotropyEnabled = VK_TRUE;
 
-    GLFWwindow* m_window = nullptr;
-    VkSurfaceKHR m_surface = nullptr;          // The surface handle we use for render targets
+    VkImage m_depthImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_depthMemory = VK_NULL_HANDLE;
+    VkImageView m_depthView = VK_NULL_HANDLE;
 
-    VkSwapchainKHR m_swapChain = nullptr;
-    VkSwapchainKHR m_oldSwapChain = nullptr;
+    GLFWwindow* m_window = VK_NULL_HANDLE;
+    VkSurfaceKHR m_surface = VK_NULL_HANDLE;          // The surface handle we use for render targets
+
+    VkSwapchainKHR m_swapChain = VK_NULL_HANDLE;
+    VkSwapchainKHR m_oldSwapChain = VK_NULL_HANDLE;
     std::vector<VkImage> m_swapChainImages;
     VkFormat m_swapChainImageFormat;
     VkExtent2D m_swapChainExtent;
@@ -202,11 +215,11 @@ private:
     std::vector<VkFramebuffer> m_swapChainFramebuffers;
 
     VkDescriptorSetLayout m_descriptorSetLayout;
-    VkPipelineLayout m_pipelineLayout = nullptr;
-    VkRenderPass m_renderPass = nullptr;
-    VkPipeline m_graphicsPipeline = nullptr;
+    VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
+    VkRenderPass m_renderPass = VK_NULL_HANDLE;
+    VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
 
-    VkCommandPool m_commandPool = nullptr;                  // Managing memory for command buffer
+    VkCommandPool m_commandPool = VK_NULL_HANDLE;                  // Managing memory for command buffer
     std::vector<VkCommandBuffer> m_commandBuffers;          // The command buffer we execute each update
 
     std::vector<VkSemaphore> m_imageAvailableSemaphores;    // Semaphore for each frame
@@ -218,12 +231,12 @@ private:
     const uint32_t WIDTH = 800;
     const uint32_t HIGHT = 600;
 
-    VkInstance m_instance = nullptr;                        // The vulkan library instance
-    VkDebugUtilsMessengerEXT m_debugMessenger = nullptr;    // The vulkan debug messenger
+    VkInstance m_instance = VK_NULL_HANDLE;                        // The vulkan library instance
+    VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;    // The vulkan debug messenger
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;     // The graphics card that we'll end up selecting
-    VkDevice m_device = nullptr;                            // Logical device handle
-    VkQueue m_graphicsQueue = nullptr;                      // Handle for the graphics queues made by the device
-    VkQueue m_presentQueue = nullptr;                       // Handle for presentation queues
+    VkDevice m_device = VK_NULL_HANDLE;                            // Logical device handle
+    VkQueue m_graphicsQueue = VK_NULL_HANDLE;                      // Handle for the graphics queues made by the device
+    VkQueue m_presentQueue = VK_NULL_HANDLE;                       // Handle for presentation queues
 
     const std::vector<const char*> m_deviceExtensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
