@@ -9,6 +9,9 @@
 //---- stb image loader ----
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+//---- tiny obj loader ----
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -75,6 +78,7 @@ void HelloTriangleApplication::InitVulkan()
     m_textImgView = CreateImageViews(m_textImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
     CreateImageSampler();
     //---- Buffers ----
+    LoadModel();
     CreateVertexIndexBuffer(verts, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, m_vertexBuffer, m_vertexBufferMemory);
     CreateVertexIndexBuffer(indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, m_indexBuffer, m_indexBufferMemory);
     CreateUniformBuffers();
@@ -496,7 +500,7 @@ void HelloTriangleApplication::CreateTextureImage()
 {
     // Use the STB library to load our image
     int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load("Textures/texture.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     assert(pixels);
 
     // Define the size of the image in memory
@@ -630,6 +634,59 @@ void HelloTriangleApplication::CreateImageSampler()
 
     // Finally we can make our sampler
     assert(vkCreateSampler(m_device, &samplerInfo, nullptr, &m_textureSampler) == VK_SUCCESS);
+}
+// =================================================
+// Name: LoadModel
+// Desc: Loads a model to be used in the vertex buffer
+// Params: NONE
+// Return: NONE
+void HelloTriangleApplication::LoadModel()
+{
+    // Declare our variables
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string warn, err;
+
+    // Call tiny OBJ's function
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
+        throw std::runtime_error(warn + err);
+        //TODO: load error model
+    }
+
+    // Format the loaded info
+    for (const auto& shape : shapes) {
+        for (const auto& index : shape.mesh.indices) {
+            Vertex vertex{};
+
+            vertex.pos = {
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
+            };
+
+            // If we have UV coords use them
+            if (index.texcoord_index >= 0)
+            {
+                vertex.texCoord = {
+                	attrib.texcoords[2 * index.texcoord_index + 0],
+                	1.0f - attrib.texcoords[2 * index.texcoord_index + 1]   // Invert our y
+                };
+            }
+            else     // Else specify a default and warn the user
+            {
+	            vertex.texCoord = { 0.0f, 1.0f };
+                printf("%s", "Loaded model contains no UV coordinates. Fallback used.");
+            }
+
+            vertex.colour = { 1.0f, 1.0f, 1.0f };
+
+            // Loop assumes each vert is unique and no duplication occurs
+            // It will still work if it does, just less efficiently
+            verts.emplace_back(vertex);
+            indices.emplace_back(indices.size());
+        }
+    }
 }
 // =================================================
 uint32_t FindMemoryType(VkPhysicalDevice physDevice, uint32_t filter, VkMemoryPropertyFlags flags) {
@@ -1046,7 +1103,7 @@ void HelloTriangleApplication::RecordCommandBuffer(VkCommandBuffer buffer, uint3
     // Bind our vertex buffers to the bindings specified
     vkCmdBindVertexBuffers(buffer, 0, 1, vertexBuffers, offsets);
 
-    vkCmdBindIndexBuffer(buffer, m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindIndexBuffer(buffer, m_indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
     vkCmdBindDescriptorSets(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, &m_descriptorSets[m_currentFrame], 0, nullptr);
 

@@ -116,6 +116,7 @@ private:
     void CreateTextureImage();
     void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
     void CreateImageSampler();
+    void LoadModel();
     template<typename BufferType>
     void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags uFlags, VkMemoryPropertyFlags pFlags, BufferType& buffer, VkDeviceMemory& memory);
     template<typename BufferType>
@@ -160,24 +161,11 @@ private:
     void CreateSyncObjects();
 
     // --- Private Attributes ---
-    const std::vector<Vertex> verts{
-        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-        {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-        {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-
-        {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-        {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-        {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
-    };
+    std::vector<Vertex> verts;
     VkBuffer m_vertexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory m_vertexBufferMemory = VK_NULL_HANDLE;
 
-    const std::vector<uint16_t> indices = {
-        0, 1, 2, 2, 3, 0,
-		4, 5, 6, 6, 7, 4
-    };
+    std::vector<uint32_t> indices;
     VkBuffer m_indexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory m_indexBufferMemory = VK_NULL_HANDLE;
 
@@ -230,6 +218,9 @@ private:
 
     const uint32_t WIDTH = 800;
     const uint32_t HIGHT = 600;
+
+    const std::string MODEL_PATH = "Models/viking_room.txt";
+    const std::string TEXTURE_PATH = "Textures/viking_room.png";
 
     VkInstance m_instance = VK_NULL_HANDLE;                        // The vulkan library instance
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;    // The vulkan debug messenger
