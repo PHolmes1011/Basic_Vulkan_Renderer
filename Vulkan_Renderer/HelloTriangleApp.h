@@ -113,8 +113,9 @@ private:
     VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling,
                                  VkFormatFeatureFlags features);
     void CreateDepthResources();
+    void GenerateMipmaps(VkImage image, int32_t texWidth, int32_t texHeight, uint8_t mipLevels);
     void CreateTextureImage();
-    void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
+    void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint8_t mipLevels);
     void CreateImageSampler();
     void LoadModel();
     template<typename BufferType>
@@ -125,8 +126,8 @@ private:
     void CopyBuffer(VkBuffer srcBuff, VkBuffer dstBuff, VkDeviceSize size);
     void CopyBuffer2Image(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
     void CreateImageBuffer(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
-                           VkImageUsageFlags usage,
-                           VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
+                           VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image,
+                           VkDeviceMemory& imageMemory, uint8_t mipLevels);
     VkCommandBuffer BeginSingleTimeCommands();
     void EndSingleTimeCommands(VkCommandBuffer cmdBuffer);
     template<typename Type>
@@ -141,7 +142,7 @@ private:
     VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& available_formats);
     VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& available_present_modes);
     VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-    VkImageView CreateImageViews(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
+    VkImageView CreateImageViews(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint8_t mipLevels);
     void CreateLogicalDevice();
     // -- Debug Functions --
     bool CheckValidationLayerSupport() const;
@@ -181,6 +182,7 @@ private:
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> m_descriptorSets;
 
+    uint8_t m_mipLevels = 0;
     VkImage m_textImage;           // A specialised buffer for images (faster accessing times)
     VkDeviceMemory m_textMemory = VK_NULL_HANDLE;
     VkImageView m_textImgView = VK_NULL_HANDLE;
