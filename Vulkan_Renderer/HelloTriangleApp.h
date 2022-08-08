@@ -102,6 +102,7 @@ private:
     auto CleanUpSwapChain() -> void;
     void CleanUp();
     void CreateInstance();
+    VkSampleCountFlagBits GetMaxUsableSampleCount();
     void PickPhysicalDevice();
     int RateSuitableDevices(VkPhysicalDevice device);
     QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
@@ -127,7 +128,7 @@ private:
     void CopyBuffer2Image(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
     void CreateImageBuffer(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
                            VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image,
-                           VkDeviceMemory& imageMemory, uint8_t mipLevels);
+                           VkDeviceMemory& imageMemory, uint8_t mipLevels, VkSampleCountFlagBits sampleCount);
     VkCommandBuffer BeginSingleTimeCommands();
     void EndSingleTimeCommands(VkCommandBuffer cmdBuffer);
     template<typename Type>
@@ -159,6 +160,7 @@ private:
     void CreateGraphicsPipeline();
     VkShaderModule CreateShaderModule(const std::vector<char>& code);
     void CreateRenderPass();
+    void CreateRenderTargets();
     void CreateSyncObjects();
 
     // --- Private Attributes ---
@@ -188,6 +190,12 @@ private:
     VkImageView m_textImgView = VK_NULL_HANDLE;
     VkSampler m_textureSampler = VK_NULL_HANDLE;
     bool m_AnisotropyEnabled = VK_TRUE;
+
+    VkSampleCountFlagBits m_msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkImage m_renderTargetImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_renderTargetMemory = VK_NULL_HANDLE;
+    VkImageView m_renderTargetView = VK_NULL_HANDLE;
 
     VkImage m_depthImage = VK_NULL_HANDLE;
     VkDeviceMemory m_depthMemory = VK_NULL_HANDLE;
