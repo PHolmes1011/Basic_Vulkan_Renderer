@@ -2123,7 +2123,10 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 
 void HelloTriangleApplication::CleanUpSwapChain()
 {
-    
+    m_depthImageBuffer.CleanUp();
+
+    m_renderTargetImageBuffer.CleanUp();
+
     for (auto framebuffer : m_swapChainFrameBuffers) {
         vkDestroyFramebuffer(m_device, framebuffer, nullptr);
     }
@@ -2142,6 +2145,9 @@ void HelloTriangleApplication::CleanUpSwapChain()
 void HelloTriangleApplication::CleanUp()
 {
     CleanUpSwapChain();
+
+    for (auto& model : m_models)
+        model.CleanUp();
 
     vkDestroySampler(m_device, m_textureSampler, nullptr);
 

@@ -89,7 +89,7 @@ class Buffer
 {
 public:
     Buffer() = default;
-    ~Buffer();
+    void CleanUp();
 
     VkBuffer& GetBuffer() { return m_buffer; }
     VkDeviceMemory& GetBufferMemory() { return m_memory; }
@@ -111,7 +111,7 @@ class ImageBuffer : public Buffer
 {
 public:
     ImageBuffer() = default;
-    ~ImageBuffer();
+    void CleanUp();
 
     VkImage& GetImage() { return m_image; }
     VkImageView& GetImageView() { return m_imageView; }
@@ -164,7 +164,7 @@ public:
         CreateVertexIndexBuffer(m_verts, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, m_vertexBuffer);
         CreateVertexIndexBuffer(m_indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, m_indexBuffer);
     }
-    ~Model();
+    void CleanUp();
 
     Texture& GetTexture() { return m_texture; }
     Buffer& GetVertexBuffer() { return m_vertexBuffer; }
@@ -339,7 +339,7 @@ private:
 //=================================================
 //       END OF HelloTriangleApplication
 //=================================================
-inline Buffer::~Buffer()
+inline void Buffer::CleanUp()
 {
     HelloTriangleApplication application = HelloTriangleApplication::Instance();
 
@@ -347,7 +347,7 @@ inline Buffer::~Buffer()
     vkFreeMemory(application.GetDevice(), m_memory, nullptr);
 
 }
-inline ImageBuffer::~ImageBuffer()
+inline void ImageBuffer::CleanUp()
 {
     HelloTriangleApplication application = HelloTriangleApplication::Instance();
     
@@ -355,7 +355,7 @@ inline ImageBuffer::~ImageBuffer()
     vkDestroyImage(application.GetDevice(), m_image, nullptr);
     
 }
-inline Model::~Model()
+inline void Model::CleanUp()
 {
     HelloTriangleApplication application = HelloTriangleApplication::Instance();
 
