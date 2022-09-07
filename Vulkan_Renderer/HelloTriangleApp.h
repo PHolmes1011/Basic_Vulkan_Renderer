@@ -114,6 +114,7 @@ public:
     void CleanUp();
 
     VkImage& GetImage() { return m_image; }
+    void SetImage(VkImage image) { m_image = image; }
     VkImageView& GetImageView() { return m_imageView; }
     [[nodiscard]] uint8_t GetMipLevels() const { return m_mipLevels; }
     void SetMipLevels(uint8_t mips) { m_mipLevels = mips; }
@@ -138,6 +139,7 @@ public:
     Texture(const char* filePath, VkFormat format, VkImageAspectFlags aspectFlags, bool hasMipLevels)
     {
         CreateTextureImage(filePath, hasMipLevels);
+        m_imageBuffer.CreateImageViews(format, aspectFlags);
     }
 
     ImageBuffer GetImageBuffer() { return m_imageBuffer; }

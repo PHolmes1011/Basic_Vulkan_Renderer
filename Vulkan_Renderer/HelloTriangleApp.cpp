@@ -268,8 +268,8 @@ int HelloTriangleApplication::RateSuitableDevices(VkPhysicalDevice device)
     // if it can use the commands we want to use
     // And can run and support our swap chain on our surface
 
-	score *= !(deviceProperties.apiVersion <= VK_API_VERSION_1_2_198 || !deviceFeatures.geometryShader ||
-        !extensionsSupported || !swapChainAdequate || !indices.IsComplete());
+	score *= (deviceProperties.apiVersion >= VK_API_VERSION_1_2_198 && deviceFeatures.geometryShader &&
+        extensionsSupported && swapChainAdequate && indices.IsComplete());
 
     return score;
 }
@@ -277,7 +277,7 @@ int HelloTriangleApplication::RateSuitableDevices(VkPhysicalDevice device)
 // Name: FindQueueFamilies
 // Desc: Check our devices for the queue families they can use - Queue families being different command lists for the GPU
 // Params: device
-// Return: QueueFamilym_indices(struct)
+// Return: QueueFamilyIndices(struct)
 QueueFamilyIndices HelloTriangleApplication::FindQueueFamilies(VkPhysicalDevice device)
 {
     QueueFamilyIndices indices;
@@ -390,10 +390,14 @@ void HelloTriangleApplication::CreateSwapChain() {
     m_swapChainImageFormat = surfaceFormat.format;
 	m_swapChainExtent = extent;
 
+    std::vector<VkImage> images(imageCount);
+
+	vkGetSwapchainImagesKHR(m_device, m_swapChain, &imageCount, images.data());
+
     // Iterate over all of the swap chain images
     for (size_t i = 0; i < m_swapChainImageBuffers.size(); i++)
     {
-        vkGetSwapchainImagesKHR(m_device, m_swapChain, &imageCount, &m_swapChainImageBuffers[i].GetImage());
+        m_swapChainImageBuffers[i].SetImage(images[i]);
         m_swapChainImageBuffers[i].CreateImageViews(m_swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 }
@@ -615,17 +619,17 @@ void Texture::CreateTextureImage(const char* filePath, bool hasMipLevels)
     HelloTriangleApplication application = HelloTriangleApplication::Instance();
 
     // Use the STB library to load our image
-    int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load(filePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    int texChannels;
+    stbi_uc* pixels = stbi_load(filePath, &m_texWidth, &m_texHeight, &texChannels, STBI_rgb_alpha);
     // max (largest dimension)  log2 (how many times can be divided by 2)  floor (for times when it's not divisible by 2)
-    uint8_t mipLevels = static_cast<uint8_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1; // +1 for original image level
+    uint8_t mipLevels = static_cast<uint8_t>(std::floor(std::log2(std::max(m_texWidth, m_texHeight)))) + 1; // +1 for original image level
     assert(pixels);
     m_imageBuffer.SetMipLevels(mipLevels);
     if (application.m_maxMip < mipLevels)
         application.m_maxMip = mipLevels;
 
     // Define the size of the image in memory
-    VkDeviceSize imgSize = texWidth * texHeight * 4; // 4 bytes per pixel
+    VkDeviceSize imgSize = m_texWidth * m_texHeight * 4; // 4 bytes per pixel
 
     // The usual staging buffer setup
     VkBuffer stagingBuffer;
@@ -643,7 +647,7 @@ void Texture::CreateTextureImage(const char* filePath, bool hasMipLevels)
     stbi_image_free(pixels);
 
     // Create an image buffer
-    m_imageBuffer.CreateImageBuffer(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+    m_imageBuffer.CreateImageBuffer(m_texWidth, m_texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_imageBuffer.GetMipLevels(), VK_SAMPLE_COUNT_1_BIT);
 
@@ -651,7 +655,7 @@ void Texture::CreateTextureImage(const char* filePath, bool hasMipLevels)
     m_imageBuffer.TransitionImageLayout(m_imageBuffer.GetImage(), VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     // Copy the staging buffer to texture image buffer
-    m_imageBuffer.CopyBuffer2Image(stagingBuffer, m_imageBuffer.GetImage(), texWidth, texHeight);
+    m_imageBuffer.CopyBuffer2Image(stagingBuffer, m_imageBuffer.GetImage(), m_texWidth, m_texHeight);
 
     if (hasMipLevels)
         GenerateMipmaps();  // Generate smaller images for lower LOD
@@ -1135,7 +1139,7 @@ void HelloTriangleApplication::CreateDescriptorSets()
 
         VkDescriptorImageInfo imageInfo;
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = m_models.data()->GetTexture().GetImageBuffer().GetImageView();
+        imageInfo.imageView = m_models[0].GetTexture().GetImageBuffer().GetImageView();
         imageInfo.sampler = m_textureSampler;
 
         std::vector<VkWriteDescriptorSet> writeDescriptors(2);
@@ -2183,6 +2187,6 @@ void HelloTriangleApplication::CleanUp()
 
     glfwTerminate();
 
-    delete m_appPointer;
     m_appPointer = nullptr;
+    delete m_appPointer;
 }
