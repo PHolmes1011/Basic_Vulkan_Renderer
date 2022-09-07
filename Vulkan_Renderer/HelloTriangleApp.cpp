@@ -390,14 +390,18 @@ void HelloTriangleApplication::CreateSwapChain() {
     m_swapChainImageFormat = surfaceFormat.format;
 	m_swapChainExtent = extent;
 
+    // Make a temporary vector to hold the images
     std::vector<VkImage> images(imageCount);
-
+    // Get the images and fill the vector
 	vkGetSwapchainImagesKHR(m_device, m_swapChain, &imageCount, images.data());
+    // Used to call vkGetSwapchainImagesKHR inside the loop, caused flashing due to image overlapping
 
     // Iterate over all of the swap chain images
     for (size_t i = 0; i < m_swapChainImageBuffers.size(); i++)
     {
+        // Then set the images one by one from temp vector
         m_swapChainImageBuffers[i].SetImage(images[i]);
+        // Then the image views
         m_swapChainImageBuffers[i].CreateImageViews(m_swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 }
