@@ -76,24 +76,14 @@ struct Vertex {
         return attributeDescription;
     }
 };
+//==================================================================================================
 //=================================================
+//              IBuffer Interface
+//=================================================
+// Holds some general functions to be used by buffer specialisations
 class IBuffer
 {
 public:
-
-private:
-
-};
-
-class Buffer
-{
-public:
-    Buffer() = default;
-    void CleanUp();
-
-    VkBuffer& GetBuffer() { return m_buffer; }
-    VkDeviceMemory& GetBufferMemory() { return m_memory; }
-
     template<typename BufferType>
     void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags uFlags, VkMemoryPropertyFlags pFlags, BufferType& buffer, VkDeviceMemory& memory);
     template<typename BufferType>
@@ -102,12 +92,31 @@ public:
     void CopyBuffer(VkBuffer srcBuff, VkBuffer dstBuff, VkDeviceSize size);
 
 private:
+
+};
+//=================================================
+//                  Buffer
+//=================================================
+// Basic buffer for holding information and memory
+class Buffer : public IBuffer
+{
+public:
+    Buffer() = default;
+    void CleanUp();
+
+    VkBuffer& GetBuffer() { return m_buffer; }
+    VkDeviceMemory& GetBufferMemory() { return m_memory; }
+
+private:
     VkBuffer m_buffer = VK_NULL_HANDLE;
     VkDeviceMemory m_memory = VK_NULL_HANDLE;
 
 };
-
-class ImageBuffer : public Buffer
+//=================================================
+//                  Image Buffer
+//=================================================
+// A more specialised buffer for holding images and their views
+class ImageBuffer : public IBuffer
 {
 public:
     ImageBuffer() = default;
@@ -116,6 +125,7 @@ public:
     VkImage& GetImage() { return m_image; }
     void SetImage(VkImage image) { m_image = image; }
     VkImageView& GetImageView() { return m_imageView; }
+    VkDeviceMemory& GetBufferMemory() { return m_memory; }
     [[nodiscard]] uint8_t GetMipLevels() const { return m_mipLevels; }
     void SetMipLevels(uint8_t mips) { m_mipLevels = mips; }
 
@@ -128,10 +138,15 @@ public:
 private:
     uint8_t m_mipLevels = 1;
     VkImage m_image = VK_NULL_HANDLE;
+    VkDeviceMemory m_memory = VK_NULL_HANDLE;
     VkImageView m_imageView = VK_NULL_HANDLE;
 
 };
+//==================================================================================================
 //=================================================
+//                  Texture
+//=================================================
+// A texture class with an ImageBuffer and MipMap generation
 class Texture
 {
 public:
@@ -154,6 +169,9 @@ private:
     int32_t m_texHeight = 0;
 };
 //=================================================
+//                  Model
+//=================================================
+// A model class containing a texture and model (with it's verts and indices)
 class Model
 {
 public:
@@ -187,6 +205,7 @@ private:
 
     Texture m_texture;
 };
+//==================================================================================================
 //=================================================
 //          HelloTriangleApplication
 //=================================================

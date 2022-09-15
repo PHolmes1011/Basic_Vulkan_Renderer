@@ -844,7 +844,7 @@ uint32_t FindMemoryType(VkPhysicalDevice physDevice, uint32_t filter, VkMemoryPr
 // Params: NONE
 // Return: NONE
 template<typename BufferType>
-void Buffer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags uFlags, VkMemoryPropertyFlags pFlags, 
+void IBuffer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags uFlags, VkMemoryPropertyFlags pFlags, 
     BufferType& buffer, VkDeviceMemory& memory)
 {
     VkBufferCreateInfo bufferInfo;
@@ -862,7 +862,7 @@ void Buffer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags uFlags, VkMemory
 }
 // =================================================
 template<typename BufferType>
-void Buffer::AllocateBindBuffer(VkMemoryPropertyFlags pFlags, BufferType& buffer, VkDeviceMemory& memory, 
+void IBuffer::AllocateBindBuffer(VkMemoryPropertyFlags pFlags, BufferType& buffer, VkDeviceMemory& memory, 
     void(*reqFunction)(VkDevice, BufferType, VkMemoryRequirements*), VkResult(*bindFunction)(VkDevice, BufferType, VkDeviceMemory, VkDeviceSize))
 {
     // Get the memory requirements for our allocator
@@ -888,7 +888,7 @@ void Buffer::AllocateBindBuffer(VkMemoryPropertyFlags pFlags, BufferType& buffer
     // Offset should always be divisible by memReqs.allignment
 }
 // =================================================
-void Buffer::CopyBuffer(VkBuffer srcBuff, VkBuffer dstBuff, VkDeviceSize size)
+void IBuffer::CopyBuffer(VkBuffer srcBuff, VkBuffer dstBuff, VkDeviceSize size)
 {
     HelloTriangleApplication application = HelloTriangleApplication::Instance();
 
