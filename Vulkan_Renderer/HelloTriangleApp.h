@@ -35,6 +35,8 @@ struct QueueFamilyIndices {
     bool IsComplete() {
         return graphics_family.has_value() && present_family.has_value();
     }
+
+    static QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
 };
 struct SwapChainSupportDetails {
     VkSurfaceCapabilitiesKHR capabilities;
@@ -207,107 +209,49 @@ private:
 };
 //==================================================================================================
 //=================================================
-//          HelloTriangleApplication
+//              RenderManager
 //=================================================
-// The class responsible for making the window managing our app
-class HelloTriangleApplication {
+// Handles rendering functions and presents images to the screen.
+// This includes: SwapChain, RenderPass and Pipeline
+class RenderManager
+{
 public:
-    // --- Public Functions ---
-    // Runs the app, called in main 
-    void Run() {
-        InitWindow();
-        InitVulkan();
-        MainLoop();
-        CleanUp();
+    void InitialiseRenderer()
+    {
+        //---- Rendering ----
+        CreateSwapChain();
+        CreateRenderPass();
+        CreateDescriptorSetLayouts();
+        CreateGraphicsPipeline();
     }
-
-    static HelloTriangleApplication& Instance();
-    const VkDevice& GetDevice() const { return m_device; }
-    const VkPhysicalDevice& GetPhysicalDevice() const { return m_physicalDevice; }
-
-    VkCommandBuffer BeginSingleTimeCommands();
-    void EndSingleTimeCommands(VkCommandBuffer cmdBuffer);
-
-    uint8_t m_maxMip = 1;
-private:
-    // --- Private Functions ---
-    void InitWindow();
-    void CreateSurface();
-    void InitVulkan();
-    void MainLoop();
-    void DrawFrame();
-    auto CleanUpSwapChain() -> void;
-    void CleanUp();
-    void CreateInstance();
-    VkSampleCountFlagBits GetMaxUsableSampleCount();
-    void PickPhysicalDevice();
-    int RateSuitableDevices(VkPhysicalDevice device);
-    QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
-    bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
-    void CreateSwapChain();
     void RecreateSwapChain();
-    void CreateFrameBuffers();
-    void CreateCommandPool();
-    VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling,
-                                 VkFormatFeatureFlags features);
-    void CreateDepthResources();
-    
-    void CreateImageSampler();
-    
-    void CreateUniformBuffers();
-    void UpdateUniformBuffers(uint32_t currentImage);
-    void CreateDescriptorPool();
-    void CreateDescriptorSets();
-    void CreateCommandBuffers();
-    void RecordCommandBuffer(VkCommandBuffer buffer, uint32_t imageidx);
-    SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
+    void CleanUp();
+
+    const VkSwapchainKHR GetSwapChain() const { return m_swapChain; }
+    std::vector<ImageBuffer>& GetSwapChainImageBuffers() { return m_swapChainImageBuffers; }
+    std::vector<VkFramebuffer>& GetSwapChainFrameBuffers() { return m_swapChainFrameBuffers; }
+    std::vector<VkCommandBuffer>& GetCommandBuffer() { return m_commandBuffers; }
+    const VkRenderPass GetRenderPass() const { return m_renderPass; }
+    const VkExtent2D GetSwapChainExtent() const { return m_swapChainExtent; }
+    const VkFormat GetSwapChainFormat() const { return m_swapChainImageFormat; }
+    const VkSampleCountFlagBits GetMSAASampleCount() const { return m_msaaSamples; }
+    const VkPipeline GetGraphicsPipeline() const { return m_graphicsPipeline; }
+    const VkPipelineLayout GetGraphicsPipelineLayout() const { return m_pipelineLayout; }
+    const VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_descriptorSetLayout; }
+
+    void SetMSAASampleCount(VkSampleCountFlagBits sampleCount) { m_msaaSamples = sampleCount; }
+private:
+    void CreateSwapChain();
     VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& available_formats);
     VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& available_present_modes);
     VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-    
-    void CreateLogicalDevice();
-    // -- Debug Functions --
-    bool CheckValidationLayerSupport() const;
-    std::vector<const char*> GetRequiredExtensions() const;
-    static VkBool32 DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-                                  VkDebugUtilsMessageTypeFlagsEXT message_type,
-                                  const VkDebugUtilsMessengerCallbackDataEXT* p_callback_data, void* p_user_data);
-    void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& create_info);
-    static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* p_create_info,
-                                                 const VkAllocationCallbacks* p_allocator,
-                                                 VkDebugUtilsMessengerEXT* p_debug_messenger);
-    void SetupDebugMessenger();
+
+    void CreateRenderPass();
+
     void CreateDescriptorSetLayouts();
+
     void CreateGraphicsPipeline();
     VkShaderModule CreateShaderModule(const std::vector<char>& code);
-    void CreateRenderPass();
-    void CreateRenderTargets();
-    void CreateSyncObjects();
-
-    // --- Private Attributes ---
-    static HelloTriangleApplication* m_appPointer;
-
-    struct UniformBufferObject {
-        glm::mat4 model;
-        glm::mat4 view;
-        glm::mat4 proj;
-    };
-
-    std::vector<Buffer> m_uniformBuffers;
-
-    VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
-    std::vector<VkDescriptorSet> m_descriptorSets;
-
-    VkSampler m_textureSampler = VK_NULL_HANDLE;
-    bool m_AnisotropyEnabled = VK_TRUE;
-    VkSampleCountFlagBits m_msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    ImageBuffer m_renderTargetImageBuffer;
-
-    ImageBuffer m_depthImageBuffer;
-
-    GLFWwindow* m_window = VK_NULL_HANDLE;
-    VkSurfaceKHR m_surface = VK_NULL_HANDLE;          // The surface handle we use for render targets
 
     VkSwapchainKHR m_swapChain = VK_NULL_HANDLE;
     VkSwapchainKHR m_oldSwapChain = VK_NULL_HANDLE;
@@ -316,34 +260,132 @@ private:
     std::vector<ImageBuffer> m_swapChainImageBuffers;
     std::vector<VkFramebuffer> m_swapChainFrameBuffers;
 
-    VkDescriptorSetLayout m_descriptorSetLayout;
     VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
     VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
 
-    VkCommandPool m_commandPool = VK_NULL_HANDLE;           // Managing memory for command buffer
+    VkSampleCountFlagBits m_msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+
     std::vector<VkCommandBuffer> m_commandBuffers;          // The command buffer we execute each update
 
-    std::vector<VkSemaphore> m_imageAvailableSemaphores;    // Semaphore for each frame
-    std::vector<VkSemaphore> m_renderFinishedSemaphores;
-    std::vector<VkFence> m_inFlightFences;                  // Sync GPU and CPU
-    std::vector<VkFence> m_imagesInFlight;
-    size_t m_currentFrame = 0;
+    VkDescriptorSetLayout m_descriptorSetLayout;
 
-    const uint32_t WIDTH = 800;
-    const uint32_t HIGHT = 600;
+};
+//==================================================================================================
+//=================================================
+//               BufferManager
+//=================================================
+// Creates and fills buffers, descriptors and push constants
+class BufferManager
+{
+public:
+    void CreateBuffers()
+    {
+        CreateUniformBuffers();
+        CreateDescriptorPool();
+        CreateDescriptorSets();
+        CreateCommandBuffers();
+    }
+    void UpdateUniformBuffers(uint32_t currentImage);
+    void RecordCommandBuffer(VkCommandBuffer buffer, uint32_t imageidx);
+    void CleanUp();
 
-    std::vector<Model> m_models;
+    VkCommandBuffer BeginSingleTimeCommands();
+    void EndSingleTimeCommands(VkCommandBuffer cmdBuffer);
+
+private:
+
+    void CreateUniformBuffers();
+    void CreateDescriptorPool();
+    void CreateDescriptorSets();
+    void CreateCommandBuffers();
+
+    struct UniformBufferObject {
+        glm::mat4 model;
+        glm::mat4 view;
+        glm::mat4 proj;
+    };
+    std::vector<Buffer> m_uniformBuffers;
+
+    VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
+    std::vector<VkDescriptorSet> m_descriptorSets;
+};
+//==================================================================================================
+//=================================================
+//               InstanceManager
+//=================================================
+// Handles the window and Vulkan instance, including finding the device
+class InstanceManager
+{
+public:
+    void CreateAppInstance()
+    {
+        //---- Instance ----
+        InitWindow();
+        CreateInstance();
+        SetupDebugMessenger();
+        CreateSurface();
+        PickPhysicalDevice();
+        CreateLogicalDevice();
+        CreateCommandPool();
+    }
+    void CleanUp();
+    SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
+
+    const VkDevice& GetDevice() const { return m_device; }
+    const VkPhysicalDevice& GetPhysicalDevice() const { return m_physicalDevice; }
+    const VkSurfaceKHR& GetSurface() const { return m_surface; }
+    const VkCommandPool GetCommandPool() const { return m_commandPool; }
+    const VkQueue GetGraphicsQueue() const { return m_graphicsQueue; }
+    const VkQueue GetPresentQueue() const { return m_presentQueue; }
+    GLFWwindow* GetWindow() const { return m_window; }
+
+    bool m_AnisotropyEnabled = VK_TRUE;
+private:
+    // ================== Methods ==================
+    void InitWindow();
+    void CreateInstance();
+    std::vector<const char*> GetRequiredExtensions() const;
+    void SetupDebugMessenger();
+    void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& create_info);
+    bool CheckValidationLayerSupport() const;
+    static VkBool32 DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+        VkDebugUtilsMessageTypeFlagsEXT message_type,
+        const VkDebugUtilsMessengerCallbackDataEXT* p_callback_data, void* p_user_data);
+    static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* p_create_info,
+        const VkAllocationCallbacks* p_allocator,
+        VkDebugUtilsMessengerEXT* p_debug_messenger);
+    void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
+
+    void CreateSurface();
+
+    void PickPhysicalDevice();
+    int  RateSuitableDevices(VkPhysicalDevice device);
+    bool CheckDeviceExtensionSupport(VkPhysicalDevice device);
+    VkSampleCountFlagBits GetMaxUsableSampleCount();
+
+    void CreateLogicalDevice();
+
+    void CreateCommandPool();
+
+    // ================== Attributes ==================
 
     VkInstance m_instance = VK_NULL_HANDLE;                        // The vulkan library instance
     VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;    // The vulkan debug messenger
-    VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;     // The graphics card that we'll end up selecting
+    VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;            // The graphics card that we'll end up selecting
     VkDevice m_device = VK_NULL_HANDLE;                            // Logical device handle
+    VkCommandPool m_commandPool = VK_NULL_HANDLE;                  // Managing memory for command buffer
     VkQueue m_graphicsQueue = VK_NULL_HANDLE;                      // Handle for the graphics queues made by the device
     VkQueue m_presentQueue = VK_NULL_HANDLE;                       // Handle for presentation queues
 
+    GLFWwindow* m_window = VK_NULL_HANDLE;
+    VkSurfaceKHR m_surface = VK_NULL_HANDLE;          // The surface handle we use for render targets
+
+    const uint32_t m_windowWidth = 800;
+    const uint32_t m_windowHeight = 600;
+
     const std::vector<const char*> m_deviceExtensions = {
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
 
     // -- Debug Attributes --
@@ -356,6 +398,110 @@ private:
 #else
     const bool m_enableValidationLayers = true;
 #endif
+
+};
+//==================================================================================================
+//=================================================
+//                ImageManager
+//=================================================
+// Creates and owns images, like Render Target and the Depth Buffer. But not the SwapChain
+class ImageManager
+{
+public:
+    void InitialiseImages()
+    {
+        CreateRenderTargets();
+        CreateDepthResources();
+        CreateFrameBuffers();
+    }
+    void CreateImageSampler();
+    void CleanUp();
+
+    ImageBuffer& GetRenderTargetImageBuffer() { return m_renderTargetImageBuffer; }
+    ImageBuffer& GetDepthImageBuffer() { return m_depthImageBuffer; }
+    const VkSampler GetTextureSampler() const { return m_textureSampler; }
+private:
+    void CreateRenderTargets();
+    void CreateDepthResources();
+    void CreateFrameBuffers();
+
+    VkSampler m_textureSampler = VK_NULL_HANDLE;
+    ImageBuffer m_renderTargetImageBuffer;
+    ImageBuffer m_depthImageBuffer;
+};
+//==================================================================================================
+//=================================================
+//             SyncObjectManager
+//=================================================
+// Fills and 
+class SyncObjectManager
+{
+public:
+    void CreateSyncObjects();
+    void CleanUp();
+
+    std::vector<VkFence>& GetInFlightFences() { return m_inFlightFences; }
+    std::vector<VkFence>& GetInFlightImages() { return m_imagesInFlight; }
+    std::vector<VkSemaphore>& GetAvailableSemaphores() { return m_imageAvailableSemaphores; }
+    std::vector<VkSemaphore>& GetFinishedSemaphores() { return m_renderFinishedSemaphores; }
+
+private:
+
+    std::vector<VkSemaphore> m_imageAvailableSemaphores;    // Semaphore for each frame
+    std::vector<VkSemaphore> m_renderFinishedSemaphores;
+    std::vector<VkFence> m_inFlightFences;                  // Sync GPU and CPU
+    std::vector<VkFence> m_imagesInFlight;
+};
+//==================================================================================================
+//=================================================
+//          HelloTriangleApplication
+//=================================================
+// The class responsible for making the window managing our app
+class HelloTriangleApplication {
+public:
+    // --- Public Functions ---
+    // Runs the app, called in main 
+    void Run() {
+        InitVulkan();
+        MainLoop();
+        CleanUp();
+    }
+
+    static HelloTriangleApplication& Instance();
+
+    const InstanceManager& GetInstanceManager() const { return m_instanceManager; }
+    const RenderManager& GetRenderManager() const { return m_renderManager; }
+    const ImageManager& GetImageManager() const { return m_imageManager; }
+    const BufferManager& GetBufferManager() const { return m_bufferManager; }
+    const SyncObjectManager& GetSyncObjectManager() const { return m_syncManager; }
+
+    const size_t GetCurrentFrame() const { return m_currentFrame; }
+
+    QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device);
+    VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling,
+        VkFormatFeatureFlags features);
+
+    std::vector<Model> m_models;
+    uint8_t m_maxMip = 1;
+private:
+    // --- Private Functions ---
+    void InitWindow();
+    
+    void InitVulkan();
+    void MainLoop();
+    void DrawFrame();
+    void CleanUp();
+    
+    // --- Private Attributes ---
+    static HelloTriangleApplication* m_appPointer;
+
+    InstanceManager m_instanceManager;
+    RenderManager m_renderManager;
+    BufferManager m_bufferManager;
+    ImageManager m_imageManager;
+    SyncObjectManager m_syncManager;
+
+    size_t m_currentFrame = 0;
 };
 //=================================================
 //       END OF HelloTriangleApplication
@@ -364,16 +510,16 @@ inline void Buffer::CleanUp()
 {
     HelloTriangleApplication application = HelloTriangleApplication::Instance();
 
-    vkDestroyBuffer(application.GetDevice(), m_buffer, nullptr);
-    vkFreeMemory(application.GetDevice(), m_memory, nullptr);
+    vkDestroyBuffer(application.GetInstanceManager().GetDevice(), m_buffer, nullptr);
+    vkFreeMemory(application.GetInstanceManager().GetDevice(), m_memory, nullptr);
 
 }
 inline void ImageBuffer::CleanUp()
 {
     HelloTriangleApplication application = HelloTriangleApplication::Instance();
     
-    vkDestroyImageView(application.GetDevice(), m_imageView, nullptr);
-    vkDestroyImage(application.GetDevice(), m_image, nullptr);
+    vkDestroyImageView(application.GetInstanceManager().GetDevice(), m_imageView, nullptr);
+    vkDestroyImage(application.GetInstanceManager().GetDevice(), m_image, nullptr);
     
 }
 inline void Model::CleanUp()
@@ -381,12 +527,12 @@ inline void Model::CleanUp()
     HelloTriangleApplication application = HelloTriangleApplication::Instance();
 
     if (m_vertexBuffer.GetBuffer() != nullptr) {
-        vkDestroyBuffer(application.GetDevice(), m_vertexBuffer.GetBuffer(), nullptr);
-        vkFreeMemory(application.GetDevice(), m_vertexBuffer.GetBufferMemory(), nullptr);
+        vkDestroyBuffer(application.GetInstanceManager().GetDevice(), m_vertexBuffer.GetBuffer(), nullptr);
+        vkFreeMemory(application.GetInstanceManager().GetDevice(), m_vertexBuffer.GetBufferMemory(), nullptr);
     }
     if (m_indexBuffer.GetBuffer() != nullptr) {
-        vkDestroyBuffer(application.GetDevice(), m_indexBuffer.GetBuffer(), nullptr);
-        vkFreeMemory(application.GetDevice(), m_indexBuffer.GetBufferMemory(), nullptr);
+        vkDestroyBuffer(application.GetInstanceManager().GetDevice(), m_indexBuffer.GetBuffer(), nullptr);
+        vkFreeMemory(application.GetInstanceManager().GetDevice(), m_indexBuffer.GetBufferMemory(), nullptr);
     }
 }
 
