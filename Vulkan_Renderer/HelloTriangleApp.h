@@ -158,6 +158,7 @@ public:
         CreateTextureImage(filePath, hasMipLevels);
         m_imageBuffer.CreateImageViews(format, aspectFlags);
     }
+    void CleanUp();
 
     ImageBuffer GetImageBuffer() { return m_imageBuffer; }
 private:
@@ -216,8 +217,12 @@ private:
 class RenderManager
 {
 public:
+    static RenderManager& Instance();
+
     void InitialiseRenderer()
     {
+        m_renderMPointer = this;
+
         //---- Rendering ----
         CreateSwapChain();
         CreateRenderPass();
@@ -234,12 +239,9 @@ public:
     const VkRenderPass GetRenderPass() const { return m_renderPass; }
     const VkExtent2D GetSwapChainExtent() const { return m_swapChainExtent; }
     const VkFormat GetSwapChainFormat() const { return m_swapChainImageFormat; }
-    const VkSampleCountFlagBits GetMSAASampleCount() const { return m_msaaSamples; }
     const VkPipeline GetGraphicsPipeline() const { return m_graphicsPipeline; }
     const VkPipelineLayout GetGraphicsPipelineLayout() const { return m_pipelineLayout; }
     const VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_descriptorSetLayout; }
-
-    void SetMSAASampleCount(VkSampleCountFlagBits sampleCount) { m_msaaSamples = sampleCount; }
 private:
     void CreateSwapChain();
     VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& available_formats);
@@ -264,12 +266,11 @@ private:
     VkRenderPass m_renderPass = VK_NULL_HANDLE;
     VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
 
-    VkSampleCountFlagBits m_msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-
     std::vector<VkCommandBuffer> m_commandBuffers;          // The command buffer we execute each update
 
     VkDescriptorSetLayout m_descriptorSetLayout;
 
+    static RenderManager* m_renderMPointer;
 };
 //==================================================================================================
 //=================================================
@@ -279,8 +280,12 @@ private:
 class BufferManager
 {
 public:
+    static BufferManager& Instance();
+
     void CreateBuffers()
     {
+        m_bufferMPointer = this;
+
         CreateUniformBuffers();
         CreateDescriptorPool();
         CreateDescriptorSets();
@@ -309,6 +314,8 @@ private:
 
     VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> m_descriptorSets;
+
+    static BufferManager* m_bufferMPointer;
 };
 //==================================================================================================
 //=================================================
@@ -318,8 +325,12 @@ private:
 class InstanceManager
 {
 public:
+    static InstanceManager& Instance();
+
     void CreateAppInstance()
     {
+        m_instanceMPointer = this;
+
         //---- Instance ----
         InitWindow();
         CreateInstance();
@@ -334,6 +345,7 @@ public:
 
     const VkDevice& GetDevice() const { return m_device; }
     const VkPhysicalDevice& GetPhysicalDevice() const { return m_physicalDevice; }
+    const VkSampleCountFlagBits GetMSAASampleCount() const { return m_msaaSamples; }
     const VkSurfaceKHR& GetSurface() const { return m_surface; }
     const VkCommandPool GetCommandPool() const { return m_commandPool; }
     const VkQueue GetGraphicsQueue() const { return m_graphicsQueue; }
@@ -381,6 +393,8 @@ private:
     GLFWwindow* m_window = VK_NULL_HANDLE;
     VkSurfaceKHR m_surface = VK_NULL_HANDLE;          // The surface handle we use for render targets
 
+    VkSampleCountFlagBits m_msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+
     const uint32_t m_windowWidth = 800;
     const uint32_t m_windowHeight = 600;
 
@@ -399,6 +413,7 @@ private:
     const bool m_enableValidationLayers = true;
 #endif
 
+    static InstanceManager* m_instanceMPointer;
 };
 //==================================================================================================
 //=================================================
@@ -408,8 +423,12 @@ private:
 class ImageManager
 {
 public:
+    static ImageManager& Instance();
+
     void InitialiseImages()
     {
+        m_imageMPointer = this;
+
         CreateRenderTargets();
         CreateDepthResources();
         CreateFrameBuffers();
@@ -428,6 +447,8 @@ private:
     VkSampler m_textureSampler = VK_NULL_HANDLE;
     ImageBuffer m_renderTargetImageBuffer;
     ImageBuffer m_depthImageBuffer;
+
+    static ImageManager* m_imageMPointer;
 };
 //==================================================================================================
 //=================================================
@@ -437,6 +458,8 @@ private:
 class SyncObjectManager
 {
 public:
+    static SyncObjectManager& Instance();
+
     void CreateSyncObjects();
     void CleanUp();
 
@@ -451,6 +474,8 @@ private:
     std::vector<VkSemaphore> m_renderFinishedSemaphores;
     std::vector<VkFence> m_inFlightFences;                  // Sync GPU and CPU
     std::vector<VkFence> m_imagesInFlight;
+
+    static SyncObjectManager* m_syncMPointer;
 };
 //==================================================================================================
 //=================================================
@@ -484,9 +509,7 @@ public:
     std::vector<Model> m_models;
     uint8_t m_maxMip = 1;
 private:
-    // --- Private Functions ---
-    void InitWindow();
-    
+    // --- Private Functions ---    
     void InitVulkan();
     void MainLoop();
     void DrawFrame();
@@ -520,6 +543,7 @@ inline void ImageBuffer::CleanUp()
     
     vkDestroyImageView(application.GetInstanceManager().GetDevice(), m_imageView, nullptr);
     vkDestroyImage(application.GetInstanceManager().GetDevice(), m_image, nullptr);
+    vkFreeMemory(application.GetInstanceManager().GetDevice(), m_memory, nullptr);
     
 }
 inline void Model::CleanUp()
@@ -534,7 +558,13 @@ inline void Model::CleanUp()
         vkDestroyBuffer(application.GetInstanceManager().GetDevice(), m_indexBuffer.GetBuffer(), nullptr);
         vkFreeMemory(application.GetInstanceManager().GetDevice(), m_indexBuffer.GetBufferMemory(), nullptr);
     }
+    m_texture.CleanUp();
 }
+inline void Texture::CleanUp()
+{
+    m_imageBuffer.CleanUp();
+}
+
 
 
 

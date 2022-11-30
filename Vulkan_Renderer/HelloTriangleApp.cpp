@@ -75,6 +75,16 @@ QueueFamilyIndices QueueFamilyIndices::FindQueueFamilies(VkPhysicalDevice device
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
+InstanceManager* InstanceManager::m_instanceMPointer = nullptr;
+
+InstanceManager& InstanceManager::Instance()
+{
+    if (!m_instanceMPointer)
+        m_instanceMPointer = new InstanceManager();
+
+    return *m_instanceMPointer;
+}
+
 void InstanceManager::CleanUp()
 {
     vkDestroyCommandPool(m_device, m_commandPool, nullptr);
@@ -218,9 +228,6 @@ std::vector<const char*> InstanceManager::GetRequiredExtensions() const
 // Return: NONE
 void InstanceManager::PickPhysicalDevice()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    RenderManager renderManager = application.GetRenderManager();
-
     // Querying just the number of devices present
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr);
@@ -244,7 +251,7 @@ void InstanceManager::PickPhysicalDevice()
     if (candidates.rbegin()->first > 0)
     {
         m_physicalDevice = candidates.rbegin()->second;
-        renderManager.SetMSAASampleCount(GetMaxUsableSampleCount());
+        m_msaaSamples = GetMaxUsableSampleCount();
     }
 
     // Check again if we found a device
@@ -445,19 +452,16 @@ void InstanceManager::CreateLogicalDevice()
 // Return: NONE
 void InstanceManager::CreateCommandPool()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    InstanceManager instanceManager = application.GetInstanceManager();
-
     // Command pool creation only takes two parameters
     // Command buffers run on the device queue
-    QueueFamilyIndices queueFamilyIndices = QueueFamilyIndices::FindQueueFamilies(instanceManager.GetPhysicalDevice());
+    QueueFamilyIndices queueFamilyIndices = QueueFamilyIndices::FindQueueFamilies(m_physicalDevice);
 
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.queueFamilyIndex = queueFamilyIndices.graphics_family.value();
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
-    assert(vkCreateCommandPool(instanceManager.GetDevice(), &poolInfo, nullptr, &m_commandPool) == VK_SUCCESS);
+    assert(vkCreateCommandPool(m_device, &poolInfo, nullptr, &m_commandPool) == VK_SUCCESS);
 }
 // ===================================================================================================================================================
 // =================================================
@@ -564,18 +568,31 @@ void InstanceManager::DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebug
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
+RenderManager* RenderManager::m_renderMPointer = nullptr;
+
+RenderManager& RenderManager::Instance()
+{
+    if (!m_renderMPointer)
+        m_renderMPointer = new RenderManager();
+
+    return *m_renderMPointer;
+}
+
 void RenderManager::CleanUp()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    VkDevice device = application.GetInstanceManager().GetDevice();
-    ImageManager imageManager = application.GetImageManager();
+    VkDevice device = InstanceManager::Instance().GetDevice();
+    ImageManager& imageManager = ImageManager::Instance();
     
     imageManager.GetRenderTargetImageBuffer().CleanUp();
 
-    imageManager.GetRenderTargetImageBuffer().CleanUp();
+    imageManager.GetDepthImageBuffer().CleanUp();
 
     for (auto framebuffer : m_swapChainFrameBuffers) {
         vkDestroyFramebuffer(device, framebuffer, nullptr);
+    }
+
+    for (auto imagebuffer : m_swapChainImageBuffers) {
+        vkDestroyImageView(device, imagebuffer.GetImageView(), nullptr);
     }
 
     vkDestroyPipeline(device, m_graphicsPipeline, nullptr);
@@ -591,8 +608,7 @@ void RenderManager::CleanUp()
 // Params: NONE
 // Return: NONE
 void RenderManager::CreateSwapChain() {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    InstanceManager instanceManager = application.GetInstanceManager();
+    InstanceManager& instanceManager = InstanceManager::Instance();
     VkDevice device = instanceManager.GetDevice();
 
     SwapChainSupportDetails swapChainSupport = instanceManager.QuerySwapChainSupport(instanceManager.GetPhysicalDevice());
@@ -661,9 +677,8 @@ void RenderManager::CreateSwapChain() {
 // =================================================
 void RenderManager::RecreateSwapChain()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    InstanceManager instanceManager = application.GetInstanceManager();
-    ImageManager imageManager = application.GetImageManager();
+    InstanceManager& instanceManager = InstanceManager::Instance();
+    ImageManager& imageManager = ImageManager::Instance();
 
     int width = 0, height = 0;
     while (width == 0 || height == 0) {
@@ -728,7 +743,7 @@ VkExtent2D RenderManager::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capab
     }
 
     int width, height;
-    glfwGetFramebufferSize(HelloTriangleApplication::Instance().GetInstanceManager().GetWindow(), &width, &height);
+    glfwGetFramebufferSize(InstanceManager::Instance().GetWindow(), &width, &height);
 
     VkExtent2D actualExtent = {
         static_cast<uint32_t>(width),
@@ -768,8 +783,7 @@ void RenderManager::CreateDescriptorSetLayouts()
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     layoutInfo.pBindings = bindings.data();
 
-    assert(vkCreateDescriptorSetLayout(HelloTriangleApplication::Instance().GetInstanceManager().GetDevice(),
-        &layoutInfo, nullptr, &m_descriptorSetLayout) == VK_SUCCESS);
+    assert(vkCreateDescriptorSetLayout(InstanceManager::Instance().GetDevice(), &layoutInfo, nullptr, &m_descriptorSetLayout) == VK_SUCCESS);
 }
 // =================================================
 static std::vector<char> readFile(const std::string& filename) {
@@ -800,8 +814,8 @@ static std::vector<char> readFile(const std::string& filename) {
 // Return: NONE
 void RenderManager::CreateGraphicsPipeline()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    VkDevice device = application.GetInstanceManager().GetDevice();
+    InstanceManager& instanceManager = InstanceManager::Instance();
+    VkDevice device = InstanceManager::Instance().GetDevice();
 
     // index           [FIXED]     |----------[PROGRAMMABLE]----------|      [FIXED]    [PROGRAMMABLE]  [FIXED]
     // vertex  |_____   input   ___ vertex ___ tesselation ___ geometry ___ rasteriser ___ fragment ___ colour  _____| frame
@@ -929,7 +943,7 @@ void RenderManager::CreateGraphicsPipeline()
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_TRUE;        // Enables shading in the pipeline
-    multisampling.rasterizationSamples = m_msaaSamples;
+    multisampling.rasterizationSamples = instanceManager.GetMSAASampleCount();
     multisampling.minSampleShading = .2f; // Optional - The minimum fraction for sample shading (closer to 1 is smoother)
     multisampling.pSampleMask = nullptr; // Optional
     multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
@@ -1050,8 +1064,7 @@ void RenderManager::CreateGraphicsPipeline()
 // Return: VkShaderModule
 VkShaderModule RenderManager::CreateShaderModule(const std::vector<char>& code)
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    VkDevice device = application.GetInstanceManager().GetDevice();
+    VkDevice device = InstanceManager::Instance().GetDevice();
 
     VkShaderModuleCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1072,13 +1085,13 @@ VkShaderModule RenderManager::CreateShaderModule(const std::vector<char>& code)
 // Return: NONE
 void RenderManager::CreateRenderPass()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    VkDevice device = application.GetInstanceManager().GetDevice();
+    HelloTriangleApplication& application = HelloTriangleApplication::Instance();
+    VkDevice device = InstanceManager::Instance().GetDevice();
 
     // Single color buffer attachment represented by one of the images from the swap chain
     VkAttachmentDescription colourAttachment{};
     colourAttachment.format = m_swapChainImageFormat;    // Format should match the format of the swap images
-    colourAttachment.samples = m_msaaSamples;
+    colourAttachment.samples = InstanceManager::Instance().GetMSAASampleCount();
     // What to do with data before and after rendering
     colourAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     colourAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1111,7 +1124,7 @@ void RenderManager::CreateRenderPass()
     VkAttachmentDescription depthAttachment{};
     depthAttachment.format = application.FindSupportedFormat({ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
         VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);   // Needs to match the format of the depth buffer
-    depthAttachment.samples = m_msaaSamples;
+    depthAttachment.samples = InstanceManager::Instance().GetMSAASampleCount();
     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE; // Don't need it after draw calls so discard it
     depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1159,6 +1172,16 @@ void RenderManager::CreateRenderPass()
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
+SyncObjectManager* SyncObjectManager::m_syncMPointer = nullptr;
+
+SyncObjectManager& SyncObjectManager::Instance()
+{
+    if (!m_syncMPointer)
+        m_syncMPointer = new SyncObjectManager();
+
+    return *m_syncMPointer;
+}
+
 // =================================================
 // Name: CreateSyncObjects
 // Desc: Create the semaphores and fences our app uses to sync
@@ -1166,9 +1189,10 @@ void RenderManager::CreateRenderPass()
 // Return: NONE
 void SyncObjectManager::CreateSyncObjects()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    RenderManager renderManager = application.GetRenderManager();
-    VkDevice device = application.GetInstanceManager().GetDevice();
+    RenderManager& renderManager = RenderManager::Instance();
+    VkDevice device = InstanceManager::Instance().GetDevice();
+
+    m_syncMPointer = this;
 
     // Assign the size we need
     m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1200,8 +1224,7 @@ void SyncObjectManager::CreateSyncObjects()
 // Return: NONE
 void SyncObjectManager::CleanUp()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    VkDevice device = application.GetInstanceManager().GetDevice();
+    VkDevice device = InstanceManager::Instance().GetDevice();
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(device, m_renderFinishedSemaphores[i], nullptr);
@@ -1214,11 +1237,19 @@ void SyncObjectManager::CleanUp()
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
+ImageManager* ImageManager::m_imageMPointer = nullptr;
+
+ImageManager& ImageManager::Instance()
+{
+    if (!m_imageMPointer)
+        m_imageMPointer = new ImageManager();
+
+    return *m_imageMPointer;
+}
+
 void ImageManager::CleanUp()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-
-    vkDestroySampler(application.GetInstanceManager().GetDevice(), m_textureSampler, nullptr);
+    vkDestroySampler(InstanceManager::Instance().GetDevice(), m_textureSampler, nullptr);
 }
 
 // =================================================
@@ -1228,19 +1259,18 @@ void ImageManager::CleanUp()
 // Return: NONE
 void ImageManager::CreateFrameBuffers()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    VkDevice device = application.GetInstanceManager().GetDevice();
-    RenderManager renderManager = application.GetRenderManager();
+    VkDevice device = InstanceManager::Instance().GetDevice();
+    RenderManager& renderManager = RenderManager::Instance();
 
     // Resizing the container to hold all of the frame buffers
-    renderManager.GetSwapChainImageBuffers().resize(renderManager.GetSwapChainImageBuffers().size());
+    renderManager.GetSwapChainFrameBuffers().resize(renderManager.GetSwapChainImageBuffers().size());
 
     // Iterate through the image views and create framebuffers from them
     for (size_t i = 0; i < renderManager.GetSwapChainImageBuffers().size(); i++) {
         std::vector<VkImageView>  attachments = {
             m_renderTargetImageBuffer.GetImageView(),
             m_depthImageBuffer.GetImageView(),
-            renderManager.GetSwapChainImageBuffers()[i].GetImageView()
+            renderManager.GetSwapChainImageBuffers()[static_cast<uint32_t>(i)].GetImageView()
         };
 
         VkFramebufferCreateInfo frameBufferInfo{};
@@ -1262,15 +1292,15 @@ void ImageManager::CreateFrameBuffers()
 // Return: NONE
 void ImageManager::CreateDepthResources()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    RenderManager renderManager = application.GetRenderManager();
+    HelloTriangleApplication& application = HelloTriangleApplication::Instance();
+    RenderManager& renderManager = RenderManager::Instance();
 
     // Find the best format
     VkFormat depthFormat = application.FindSupportedFormat({ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
         VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
     m_depthImageBuffer.CreateImageBuffer(renderManager.GetSwapChainExtent().width, renderManager.GetSwapChainExtent().height, depthFormat,
-        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 1, renderManager.GetMSAASampleCount());
+        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 1, InstanceManager::Instance().GetMSAASampleCount());
 
     m_depthImageBuffer.CreateImageViews(depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT); // Doesn't need a specific format, just enough accuracy
 
@@ -1284,8 +1314,8 @@ void ImageManager::CreateDepthResources()
 // Return: NONE
 void ImageManager::CreateImageSampler()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    const InstanceManager instanceManager = application.GetInstanceManager();
+    HelloTriangleApplication& application = HelloTriangleApplication::Instance();
+    const InstanceManager& instanceManager = InstanceManager::Instance();
 
     VkSamplerCreateInfo samplerInfo;
     samplerInfo.pNext = nullptr;
@@ -1326,14 +1356,13 @@ void ImageManager::CreateImageSampler()
 // Return: NONE
 void ImageManager::CreateRenderTargets()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    RenderManager renderManager = application.GetRenderManager();
+    RenderManager& renderManager = RenderManager::Instance();
 
     VkFormat renderTargetFormat = renderManager.GetSwapChainFormat();
 
     // Mip level has to be 1. Enforced by Vulkan
     m_renderTargetImageBuffer.CreateImageBuffer(renderManager.GetSwapChainExtent().width, renderManager.GetSwapChainExtent().height, renderTargetFormat, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 1, renderManager.GetMSAASampleCount());
+        VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 1, InstanceManager::Instance().GetMSAASampleCount());
 
     m_renderTargetImageBuffer.CreateImageViews(renderTargetFormat, VK_IMAGE_ASPECT_COLOR_BIT);
 }
@@ -1342,12 +1371,21 @@ void ImageManager::CreateRenderTargets()
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
+BufferManager* BufferManager::m_bufferMPointer = nullptr;
+
+BufferManager& BufferManager::Instance()
+{
+    if (!m_bufferMPointer)
+        m_bufferMPointer = new BufferManager();
+
+    return *m_bufferMPointer;
+}
+
 void BufferManager::CleanUp()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    const VkDevice device = application.GetInstanceManager().GetDevice();
+    const VkDevice device = InstanceManager::Instance().GetDevice();
 
-    vkDestroyDescriptorSetLayout(device, application.GetRenderManager().GetDescriptorSetLayout(), nullptr);
+    vkDestroyDescriptorSetLayout(device, RenderManager::Instance().GetDescriptorSetLayout(), nullptr);
 
     // Sets cleaned up implicitly 
     vkDestroyDescriptorPool(device, m_descriptorPool, nullptr);
@@ -1383,9 +1421,8 @@ void BufferManager::CreateUniformBuffers()
 // Return: NONE
 void BufferManager::UpdateUniformBuffers(uint32_t currentImage)
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    RenderManager renderManager = application.GetRenderManager();
-    InstanceManager instanceManager = application.GetInstanceManager();
+    RenderManager& renderManager = RenderManager::Instance();
+    InstanceManager& instanceManager = InstanceManager::Instance();
 
     // The time
     static auto startTime = std::chrono::high_resolution_clock::now();
@@ -1416,8 +1453,7 @@ void BufferManager::UpdateUniformBuffers(uint32_t currentImage)
 // Return: NONE
 void BufferManager::CreateDescriptorPool()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    VkDevice device = application.GetInstanceManager().GetDevice();
+    VkDevice device = InstanceManager::Instance().GetDevice();
 
     std::vector<VkDescriptorPoolSize> poolSizes(2);
 
@@ -1441,11 +1477,11 @@ void BufferManager::CreateDescriptorPool()
 // Return: NONE
 void BufferManager::CreateDescriptorSets()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    InstanceManager instanceManager = application.GetInstanceManager();
-    ImageManager imageManager = application.GetImageManager();
+    HelloTriangleApplication& application = HelloTriangleApplication::Instance();
+    InstanceManager& instanceManager = InstanceManager::Instance();
+    ImageManager& imageManager = ImageManager::Instance();
 
-    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, application.GetRenderManager().GetDescriptorSetLayout());
+    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, RenderManager::Instance().GetDescriptorSetLayout());
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = m_descriptorPool;                                // The pool to allocate from
@@ -1502,21 +1538,21 @@ void BufferManager::CreateDescriptorSets()
 // Return: NONE
 void BufferManager::CreateCommandBuffers()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    RenderManager renderManager = application.GetRenderManager();
+    RenderManager& renderManager = RenderManager::Instance();
+    InstanceManager& instanceManager = InstanceManager::Instance();
 
     renderManager.GetCommandBuffer().resize(renderManager.GetSwapChainFrameBuffers().size());
 
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = application.GetInstanceManager().GetCommandPool();
+    allocInfo.commandPool = instanceManager.GetCommandPool();
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;  // Specifies if the allocated command buffers are primary or secondary
     allocInfo.commandBufferCount = static_cast<uint32_t>(renderManager.GetCommandBuffer().size());
 
     // VK_COMMAND_BUFFER_LEVEL_PRIMARY: Can be submitted to a queue for execution, but cannot be called from other command buffers.
     // VK_COMMAND_BUFFER_LEVEL_SECONDARY: Cannot be submitted directly, but can be called from primary command buffers.
 
-    assert(vkAllocateCommandBuffers(application.GetInstanceManager().GetDevice(), &allocInfo, renderManager.GetCommandBuffer().data()) == VK_SUCCESS);
+    assert(vkAllocateCommandBuffers(instanceManager.GetDevice(), &allocInfo, renderManager.GetCommandBuffer().data()) == VK_SUCCESS);
 
 }
 // =================================================
@@ -1526,8 +1562,8 @@ void BufferManager::CreateCommandBuffers()
 // Return: NONE
 void BufferManager::RecordCommandBuffer(VkCommandBuffer buffer, uint32_t imageidx)
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    RenderManager renderManager = application.GetRenderManager();
+    HelloTriangleApplication& application = HelloTriangleApplication::Instance();
+    RenderManager& renderManager = RenderManager::Instance();
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1599,9 +1635,8 @@ void BufferManager::RecordCommandBuffer(VkCommandBuffer buffer, uint32_t imageid
 // =================================================
 VkCommandBuffer BufferManager::BeginSingleTimeCommands()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    RenderManager renderManager = application.GetRenderManager();
-    InstanceManager instanceManager = application.GetInstanceManager();
+    RenderManager& renderManager = RenderManager::Instance();
+    InstanceManager& instanceManager = InstanceManager::Instance();
 
     // Create temporary command buffer for this operation
     // TODO: Make this have it's own command pool with VK_COMMAND_POOL_CREATE_TRANSIENT_BIT enabled
@@ -1628,9 +1663,8 @@ VkCommandBuffer BufferManager::BeginSingleTimeCommands()
 // =================================================
 void BufferManager::EndSingleTimeCommands(VkCommandBuffer cmdBuffer)
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    RenderManager renderManager = application.GetRenderManager();
-    InstanceManager instanceManager = application.GetInstanceManager();
+    RenderManager& renderManager = RenderManager::Instance();
+    InstanceManager& instanceManager = InstanceManager::Instance();
 
     // And then end it
     vkEndCommandBuffer(cmdBuffer);
@@ -1662,8 +1696,7 @@ void BufferManager::EndSingleTimeCommands(VkCommandBuffer cmdBuffer)
 // Return: NONE
 void Texture::GenerateMipmaps()
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    BufferManager bufferManager = application.GetBufferManager();
+    BufferManager& bufferManager = BufferManager::Instance();
 
     VkCommandBuffer commandBuffer = bufferManager.BeginSingleTimeCommands();
 
@@ -1749,7 +1782,7 @@ void Texture::GenerateMipmaps()
 // Return: NONE
 void Texture::CreateTextureImage(const char* filePath, bool hasMipLevels)
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
+    HelloTriangleApplication& application = HelloTriangleApplication::Instance();
 
     // Use the STB library to load our image
     int texChannels;
@@ -1811,8 +1844,7 @@ void Texture::CreateTextureImage(const char* filePath, bool hasMipLevels)
 // Return: NONE
 void ImageBuffer::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    BufferManager bufferManager = application.GetBufferManager();
+    BufferManager& bufferManager = BufferManager::Instance();
 
     VkCommandBuffer commandBuffer = bufferManager.BeginSingleTimeCommands();
 
@@ -1899,7 +1931,7 @@ void IBuffer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags uFlags, VkMemor
     bufferInfo.flags = 0;   // Used to configure sparse memory
 
     // Create a buffer
-    assert(vkCreateBuffer(HelloTriangleApplication::Instance().GetInstanceManager().GetDevice(), &bufferInfo, nullptr, &buffer) == VK_SUCCESS);
+    assert(vkCreateBuffer(InstanceManager::Instance().GetDevice(), &bufferInfo, nullptr, &buffer) == VK_SUCCESS);
 
     AllocateBindBuffer(pFlags, buffer, memory, vkGetBufferMemoryRequirements, vkBindBufferMemory);
 }
@@ -1910,31 +1942,30 @@ void IBuffer::AllocateBindBuffer(VkMemoryPropertyFlags pFlags, BufferType& buffe
 {
     // Get the memory requirements for our allocator
     VkMemoryRequirements memoryRequirements;
-    reqFunction(HelloTriangleApplication::Instance().GetInstanceManager().GetDevice(), buffer, &memoryRequirements);
+    reqFunction(InstanceManager::Instance().GetDevice(), buffer, &memoryRequirements);
 
     // The memory allocator to be paired with the buffer
     VkMemoryAllocateInfo allocInfo;
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.pNext = nullptr;
     allocInfo.allocationSize = memoryRequirements.size;
-    allocInfo.memoryTypeIndex = FindMemoryType(HelloTriangleApplication::Instance().GetInstanceManager().GetPhysicalDevice(), memoryRequirements.memoryTypeBits, pFlags);
+    allocInfo.memoryTypeIndex = FindMemoryType(InstanceManager::Instance().GetPhysicalDevice(), memoryRequirements.memoryTypeBits, pFlags);
     // vkFlushMappedMemoryRanges(m_device, memoryrange.length, memoryrange.data) can be used instead of VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     // Ensures the memory is made available immidiately with explicit caching
 
     // Allocate the memory that can accomdate our requirements
-    assert(vkAllocateMemory(HelloTriangleApplication::Instance().GetInstanceManager().GetDevice(), &allocInfo, nullptr, &memory) == VK_SUCCESS);
+    assert(vkAllocateMemory(InstanceManager::Instance().GetDevice(), &allocInfo, nullptr, &memory) == VK_SUCCESS);
     // TODO: IRL calling allocate for every buffer is bad practice, the 'right' way is for many buffers to share an allocate
     // Could make own allocator or use the VulkanMemoryAllocator library (Red Kite recommended making own allocator remember)
 
     // Bind our buffer and memory together (Vertex buffer in this case)
-    bindFunction(HelloTriangleApplication::Instance().GetInstanceManager().GetDevice(), buffer, memory, 0);
+    bindFunction(InstanceManager::Instance().GetDevice(), buffer, memory, 0);
     // Offset should always be divisible by memReqs.allignment
 }
 // =================================================
 void IBuffer::CopyBuffer(VkBuffer srcBuff, VkBuffer dstBuff, VkDeviceSize size)
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    BufferManager bufferManager = application.GetBufferManager();
+    BufferManager& bufferManager = BufferManager::Instance();
 
     // Memory transfer operations are done using command buffers, like drawing commands
     VkCommandBuffer commandBuffer = bufferManager.BeginSingleTimeCommands();
@@ -1952,8 +1983,7 @@ void IBuffer::CopyBuffer(VkBuffer srcBuff, VkBuffer dstBuff, VkDeviceSize size)
 // =================================================
 void ImageBuffer::CopyBuffer2Image(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    BufferManager bufferManager = application.GetBufferManager();
+    BufferManager& bufferManager = BufferManager::Instance();
 
     VkCommandBuffer commandBuffer = bufferManager.BeginSingleTimeCommands();
 
@@ -2001,7 +2031,7 @@ void ImageBuffer::CreateImageBuffer(uint32_t width, uint32_t height, VkFormat fo
 
     // Make our image using the info specified
     // Possible for VK_FORMAT_R8G8B8A8_SRGB to not be supported but uncommon
-    assert(vkCreateImage(HelloTriangleApplication::Instance().GetInstanceManager().GetDevice(), &imageInfo, nullptr, &m_image) == VK_SUCCESS);
+    assert(vkCreateImage(InstanceManager::Instance().GetDevice(), &imageInfo, nullptr, &m_image) == VK_SUCCESS);
 
     AllocateBindBuffer<VkImage>(properties, m_image, GetBufferMemory(), vkGetImageMemoryRequirements, vkBindImageMemory);
 }
@@ -2033,9 +2063,7 @@ void ImageBuffer::CreateImageViews(VkFormat format, VkImageAspectFlags aspectFla
     createInfo.subresourceRange.baseArrayLayer = 0;
     createInfo.subresourceRange.layerCount = 1;
 
-    const auto& device = HelloTriangleApplication::Instance();
-
-    assert(vkCreateImageView(HelloTriangleApplication::Instance().GetInstanceManager().GetDevice(), &createInfo, nullptr, &m_imageView) == VK_SUCCESS);
+    assert(vkCreateImageView(InstanceManager::Instance().GetDevice(), &createInfo, nullptr, &m_imageView) == VK_SUCCESS);
 
 }
 
@@ -2104,8 +2132,7 @@ void Model::LoadModel(const char* filePath)
 template<typename Type>
 void Model::CreateVertexIndexBuffer(std::vector<Type>dataVec, VkBufferUsageFlagBits useFlag, Buffer& buffer)
 {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    VkDevice device = application.GetInstanceManager().GetDevice();
+    VkDevice device = InstanceManager::Instance().GetDevice();
 
     const VkDeviceSize size = sizeof(dataVec[0]) * dataVec.size();
 
@@ -2182,8 +2209,7 @@ bool HasStencilComponent(VkFormat format) {
 // Params: candidates, tiling, features
 // Return: VkFormat
 VkFormat HelloTriangleApplication::FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
-    HelloTriangleApplication application = HelloTriangleApplication::Instance();
-    VkPhysicalDevice physicalDevice = application.GetInstanceManager().GetPhysicalDevice();
+    VkPhysicalDevice physicalDevice = InstanceManager::Instance().GetPhysicalDevice();
 
     // The best format depends on the tiling mode and usage
     for (VkFormat format : candidates) {
