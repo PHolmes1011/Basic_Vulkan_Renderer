@@ -111,11 +111,6 @@ void InstanceManager::InitWindow()
     // Tell it to NOT use OpenGL
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "Vulkan Window", nullptr, nullptr);
-
-    uint32_t extensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-
-    std::cout << extensionCount << " extensions supported\n";
 }
 //=================================================
 // Name: CreateSurface
@@ -129,7 +124,8 @@ void InstanceManager::CreateSurface()
     // ------------------
 
     // Creates our surface, changing to suit what OS we are using
-    assert(glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface) == VK_SUCCESS);
+    VkResult retCode = glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface);
+    assert(("glfwCreateWindowSurface failed to create surface", retCode == VK_SUCCESS));
 }
 // ===================================================================================================================================================
 // =================================================
@@ -165,24 +161,25 @@ void InstanceManager::CreateInstance()
     createInfo.ppEnabledExtensionNames = extensions.data();
 
     // The last two members of the struct determine the global validation layers to enable
+#ifdef _DEBUG
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
-    if (m_enableValidationLayers) {
-        // Select the validation layer we want for the amount of debugging we want
-        // By default Vulkan has little to no error checking or handling
-        createInfo.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
-        createInfo.ppEnabledLayerNames = VALIDATION_LAYERS.data();
 
-        PopulateDebugMessengerCreateInfo(debugCreateInfo);
-        createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
-    }
-    else {
-        // Should be 0 in release mode
-        createInfo.enabledLayerCount = 0;
+    // Select the validation layer we want for the amount of debugging we want
+    // By default Vulkan has little to no error checking or handling
+    createInfo.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
+    createInfo.ppEnabledLayerNames = VALIDATION_LAYERS.data();
 
-        createInfo.pNext = nullptr;
-    }
+    PopulateDebugMessengerCreateInfo(debugCreateInfo);
+    createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
+#else
+    // Should be 0 in release mode
+    createInfo.enabledLayerCount = 0;
 
-    assert(vkCreateInstance(&createInfo, nullptr, &m_instance) == VK_SUCCESS);
+    createInfo.pNext = nullptr;
+#endif
+
+    VkResult retCode = vkCreateInstance(&createInfo, nullptr, &m_instance);
+    assert(("vkCreateInstance failed", retCode == VK_SUCCESS));
 
 #ifdef _DEBUG
     // To retrieve a list of supported extensions before creating an instance
@@ -233,7 +230,7 @@ void InstanceManager::PickPhysicalDevice()
     vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr);
 
     // Make sure there are devices
-    assert(deviceCount);
+    assert(("Failed to find any devices", deviceCount));
 
     // An array to hold all of the VkPhysicalDevice handles
     std::vector<VkPhysicalDevice> devices(deviceCount);
@@ -255,7 +252,7 @@ void InstanceManager::PickPhysicalDevice()
     }
 
     // Check again if we found a device
-    assert(m_physicalDevice);
+    assert(("Physical device is null", m_physicalDevice));
 }
 // =================================================
 // Name: GetMaxUsableSampleCount
@@ -438,7 +435,8 @@ void InstanceManager::CreateLogicalDevice()
     // ---------------
 
     // Instantiate the logical device, and check it was successful
-    assert(vkCreateDevice(m_physicalDevice, &createInfo, nullptr, &m_device) == VK_SUCCESS);
+    VkResult retCode = vkCreateDevice(m_physicalDevice, &createInfo, nullptr, &m_device);
+    assert(("vkCreateDevice failed", retCode == VK_SUCCESS));
 
     // Retrieve queue handles for each queue family
     // We only have one queue so we'll just use 0
@@ -461,7 +459,8 @@ void InstanceManager::CreateCommandPool()
     poolInfo.queueFamilyIndex = queueFamilyIndices.graphics_family.value();
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
-    assert(vkCreateCommandPool(m_device, &poolInfo, nullptr, &m_commandPool) == VK_SUCCESS);
+    VkResult retCode = vkCreateCommandPool(m_device, &poolInfo, nullptr, &m_commandPool);
+    assert(("vkCreateCommandPool failed", retCode == VK_SUCCESS));
 }
 // ===================================================================================================================================================
 // =================================================
@@ -652,7 +651,8 @@ void RenderManager::CreateSwapChain() {
     createInfo.clipped = VK_TRUE;
     createInfo.oldSwapchain = VK_NULL_HANDLE;
 
-    assert(vkCreateSwapchainKHR(device, &createInfo, nullptr, &m_swapChain) == VK_SUCCESS);
+    VkResult retCode = vkCreateSwapchainKHR(device, &createInfo, nullptr, &m_swapChain);
+    assert(("vkCreateSwapchainKHR failed", retCode == VK_SUCCESS));
 
     // Save what we've made to reference later
     m_swapChainImageBuffers.resize(imageCount);
@@ -760,14 +760,14 @@ VkExtent2D RenderManager::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capab
 
 void RenderManager::CreateDescriptorSetLayouts()
 {
-    VkDescriptorSetLayoutBinding uboLayout;
+    VkDescriptorSetLayoutBinding uboLayout{};
     uboLayout.binding = 0;                                          // Binding used in the shader
     uboLayout.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;              // And which shader it is
     uboLayout.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;   // What we want to bind
     uboLayout.descriptorCount = 1;                                  // And how many of that thing we want to bind
     uboLayout.pImmutableSamplers = nullptr;                         // For image sampling (we don't want in this case)
 
-    VkDescriptorSetLayoutBinding samplerLayoutBinding;
+    VkDescriptorSetLayoutBinding samplerLayoutBinding{};
     samplerLayoutBinding.binding = 1;
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -776,14 +776,15 @@ void RenderManager::CreateDescriptorSetLayouts()
 
     const std::vector<VkDescriptorSetLayoutBinding> bindings = { uboLayout, samplerLayoutBinding };
 
-    VkDescriptorSetLayoutCreateInfo layoutInfo;
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.pNext = nullptr;
     layoutInfo.flags = 0;
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     layoutInfo.pBindings = bindings.data();
 
-    assert(vkCreateDescriptorSetLayout(InstanceManager::Instance().GetDevice(), &layoutInfo, nullptr, &m_descriptorSetLayout) == VK_SUCCESS);
+    VkResult retCode = vkCreateDescriptorSetLayout(InstanceManager::Instance().GetDevice(), &layoutInfo, nullptr, &m_descriptorSetLayout);
+    assert(("vkCreateDescriptorSetLayout failed", retCode == VK_SUCCESS));
 }
 // =================================================
 static std::vector<char> readFile(const std::string& filename) {
@@ -1018,7 +1019,8 @@ void RenderManager::CreateGraphicsPipeline()
 
     // -=-=-=-=-=-=-=-=-=- PIPELINE SETUP -=-=-=-=-=-=-=-=-=-
 
-    assert(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_pipelineLayout) == VK_SUCCESS);
+    VkResult retCode = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_pipelineLayout);
+    assert(("vkCreatePipelineLayout failed", retCode == VK_SUCCESS));
 
     // Now create the pipeline
     VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -1049,7 +1051,8 @@ void RenderManager::CreateGraphicsPipeline()
     pipelineInfo.basePipelineIndex = -1; // Optional
 
     // Make it
-    assert(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_graphicsPipeline) == VK_SUCCESS);
+    retCode = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_graphicsPipeline);
+    assert(("vkCreateGraphicsPipelines failed", retCode == VK_SUCCESS));
 
     // -=-=-=-=-=-=-=-=-=- CLEANUP -=-=-=-=-=-=-=-=-=-
 
@@ -1071,10 +1074,11 @@ VkShaderModule RenderManager::CreateShaderModule(const std::vector<char>& code)
     createInfo.codeSize = code.size();
     createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());  // Cast the char to a uint32_t
 
-    VkShaderModule shaderModule;
+    VkShaderModule shaderModule = VK_NULL_HANDLE;
 
     // The nullptr is an optional pointer to custom allocators
-    assert(vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) == VK_SUCCESS);
+    VkResult retCode = vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule);
+    assert(("vkCreateShaderModule failed", retCode == VK_SUCCESS));
 
     return shaderModule;
 }
@@ -1166,7 +1170,8 @@ void RenderManager::CreateRenderPass()
     renderPassInfo.dependencyCount = 1;
     renderPassInfo.pDependencies = &dependency;
 
-    assert(vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_renderPass) == VK_SUCCESS);
+    VkResult retCode = vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_renderPass);
+    assert(("vkCreateRenderPass failed", retCode == VK_SUCCESS));
 }
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 // <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
@@ -1212,9 +1217,12 @@ void SyncObjectManager::CreateSyncObjects()
 
     // Make a semaphore for each frame
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        assert(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &m_imageAvailableSemaphores[i]) == VK_SUCCESS &&
-            vkCreateSemaphore(device, &semaphoreInfo, nullptr, &m_renderFinishedSemaphores[i]) == VK_SUCCESS &&
-            vkCreateFence(device, &fenceInfo, nullptr, &m_inFlightFences[i]) == VK_SUCCESS);
+        VkResult retCode = vkCreateSemaphore(device, &semaphoreInfo, nullptr, &m_imageAvailableSemaphores[i]);
+        assert(("vkCreateSemaphore failed to create m_imageAvailableSemaphores", retCode == VK_SUCCESS));
+        retCode = vkCreateSemaphore(device, &semaphoreInfo, nullptr, &m_renderFinishedSemaphores[i]);
+        assert(("vkCreateSemaphore failed to create m_renderFinishedSemaphores", retCode == VK_SUCCESS));
+        retCode = vkCreateFence(device, &fenceInfo, nullptr, &m_inFlightFences[i]);
+        assert(("vkCreateFence failed to create m_inFlightFences", retCode == VK_SUCCESS));
     }
 }
 // =================================================
@@ -1282,7 +1290,8 @@ void ImageManager::CreateFrameBuffers()
         frameBufferInfo.height = renderManager.GetSwapChainExtent().height;
         frameBufferInfo.layers = 1;
 
-        assert(vkCreateFramebuffer(device, &frameBufferInfo, nullptr, &renderManager.GetSwapChainFrameBuffers()[i]) == VK_SUCCESS);
+        VkResult retCode = vkCreateFramebuffer(device, &frameBufferInfo, nullptr, &renderManager.GetSwapChainFrameBuffers()[i]);
+        assert(("vkCreateFramebuffer failed", retCode == VK_SUCCESS));
     }
 }
 // =================================================
@@ -1317,7 +1326,7 @@ void ImageManager::CreateImageSampler()
     HelloTriangleApplication& application = HelloTriangleApplication::Instance();
     const InstanceManager& instanceManager = InstanceManager::Instance();
 
-    VkSamplerCreateInfo samplerInfo;
+    VkSamplerCreateInfo samplerInfo{};
     samplerInfo.pNext = nullptr;
     samplerInfo.flags = 0;
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -1347,7 +1356,8 @@ void ImageManager::CreateImageSampler()
     samplerInfo.maxLod = static_cast<float>(application.m_maxMip);
 
     // Finally we can make our sampler
-    assert(vkCreateSampler(instanceManager.GetDevice(), &samplerInfo, nullptr, &m_textureSampler) == VK_SUCCESS);
+    VkResult retCode = vkCreateSampler(instanceManager.GetDevice(), &samplerInfo, nullptr, &m_textureSampler);
+    assert(("vkCreateSampler failed", retCode == VK_SUCCESS));
 }
 // =================================================
 // Name: CreateRenderTargets
@@ -1468,7 +1478,8 @@ void BufferManager::CreateDescriptorPool()
     poolInfo.pPoolSizes = poolSizes.data();
     poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);         // The maximum amount that can exist from the pool
 
-    assert(vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_descriptorPool) == VK_SUCCESS);
+    VkResult retCode = vkCreateDescriptorPool(device, &poolInfo, nullptr, &m_descriptorPool);
+    assert(("vkCreateDescriptorPool failed", retCode == VK_SUCCESS));
 }
 // =================================================
 // Name: CreateDescriptorSets
@@ -1490,16 +1501,17 @@ void BufferManager::CreateDescriptorSets()
 
     m_descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
 
-    assert(vkAllocateDescriptorSets(instanceManager.GetDevice(), &allocInfo, m_descriptorSets.data()) == VK_SUCCESS);
+    VkResult retCode = vkAllocateDescriptorSets(instanceManager.GetDevice(), &allocInfo, m_descriptorSets.data());
+    assert(("vkAllocateDescriptorSets failed", retCode == VK_SUCCESS));
 
     // Loop to populate the descriptors
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkDescriptorBufferInfo bufferInfo;
+        VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = m_uniformBuffers[i].GetBuffer();
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBufferObject);
 
-        VkDescriptorImageInfo imageInfo;
+        VkDescriptorImageInfo imageInfo{};
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageInfo.imageView = application.m_models[0].GetTexture().GetImageBuffer().GetImageView();
         imageInfo.sampler = imageManager.GetTextureSampler();
@@ -1552,7 +1564,8 @@ void BufferManager::CreateCommandBuffers()
     // VK_COMMAND_BUFFER_LEVEL_PRIMARY: Can be submitted to a queue for execution, but cannot be called from other command buffers.
     // VK_COMMAND_BUFFER_LEVEL_SECONDARY: Cannot be submitted directly, but can be called from primary command buffers.
 
-    assert(vkAllocateCommandBuffers(instanceManager.GetDevice(), &allocInfo, renderManager.GetCommandBuffer().data()) == VK_SUCCESS);
+    VkResult retCode = vkAllocateCommandBuffers(instanceManager.GetDevice(), &allocInfo, renderManager.GetCommandBuffer().data());
+    assert(("vkAllocateCommandBuffers failed", retCode == VK_SUCCESS));
 
 }
 // =================================================
@@ -1570,7 +1583,8 @@ void BufferManager::RecordCommandBuffer(VkCommandBuffer buffer, uint32_t imageid
     beginInfo.flags = 0;                  // Optional   - how we will use it
     beginInfo.pInheritanceInfo = nullptr; // Optional   - which primary buffer to inherit from
 
-    assert(vkBeginCommandBuffer(buffer, &beginInfo) == VK_SUCCESS);
+    VkResult retCode = vkBeginCommandBuffer(buffer, &beginInfo);
+    assert(("vkBeginCommandBuffer failed to record command buffer", retCode == VK_SUCCESS));
     // Will end any other command buffer being recorded when called
 
     // Drawing starts by beginning the render pass
@@ -1630,7 +1644,8 @@ void BufferManager::RecordCommandBuffer(VkCommandBuffer buffer, uint32_t imageid
     vkCmdEndRenderPass(buffer);
 
     // And finish recording the buffer
-    assert(vkEndCommandBuffer(buffer) == VK_SUCCESS);
+    retCode = vkEndCommandBuffer(buffer);
+    assert(("vkEndCommandBuffer failed to stop recording the command buffer", retCode == VK_SUCCESS));
 }
 // =================================================
 VkCommandBuffer BufferManager::BeginSingleTimeCommands()
@@ -1640,7 +1655,7 @@ VkCommandBuffer BufferManager::BeginSingleTimeCommands()
 
     // Create temporary command buffer for this operation
     // TODO: Make this have it's own command pool with VK_COMMAND_POOL_CREATE_TRANSIENT_BIT enabled
-    VkCommandBufferAllocateInfo allocInfo;
+    VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.pNext = nullptr;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -1651,7 +1666,7 @@ VkCommandBuffer BufferManager::BeginSingleTimeCommands()
     vkAllocateCommandBuffers(instanceManager.GetDevice(), &allocInfo, &commandBuffer);
 
     // Immediately start recording to the command buffer
-    VkCommandBufferBeginInfo beginInfo;
+    VkCommandBufferBeginInfo beginInfo{};
     beginInfo.pNext = nullptr;
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; // Tells the driver we just want to do this once
@@ -1922,7 +1937,7 @@ template<typename BufferType>
 void IBuffer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags uFlags, VkMemoryPropertyFlags pFlags,
     BufferType& buffer, VkDeviceMemory& memory)
 {
-    VkBufferCreateInfo bufferInfo;
+    VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.pNext = nullptr;
     bufferInfo.size = size;      // Size of buffer
@@ -1931,7 +1946,8 @@ void IBuffer::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags uFlags, VkMemor
     bufferInfo.flags = 0;   // Used to configure sparse memory
 
     // Create a buffer
-    assert(vkCreateBuffer(InstanceManager::Instance().GetDevice(), &bufferInfo, nullptr, &buffer) == VK_SUCCESS);
+    VkResult retCode = vkCreateBuffer(InstanceManager::Instance().GetDevice(), &bufferInfo, nullptr, &buffer);
+    assert(("vkCreateBuffer failed", retCode == VK_SUCCESS));
 
     AllocateBindBuffer(pFlags, buffer, memory, vkGetBufferMemoryRequirements, vkBindBufferMemory);
 }
@@ -1945,7 +1961,7 @@ void IBuffer::AllocateBindBuffer(VkMemoryPropertyFlags pFlags, BufferType& buffe
     reqFunction(InstanceManager::Instance().GetDevice(), buffer, &memoryRequirements);
 
     // The memory allocator to be paired with the buffer
-    VkMemoryAllocateInfo allocInfo;
+    VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.pNext = nullptr;
     allocInfo.allocationSize = memoryRequirements.size;
@@ -1954,7 +1970,8 @@ void IBuffer::AllocateBindBuffer(VkMemoryPropertyFlags pFlags, BufferType& buffe
     // Ensures the memory is made available immidiately with explicit caching
 
     // Allocate the memory that can accomdate our requirements
-    assert(vkAllocateMemory(InstanceManager::Instance().GetDevice(), &allocInfo, nullptr, &memory) == VK_SUCCESS);
+    VkResult retCode = vkAllocateMemory(InstanceManager::Instance().GetDevice(), &allocInfo, nullptr, &memory);
+    assert(("vkAllocateMemory failed", retCode == VK_SUCCESS));
     // TODO: IRL calling allocate for every buffer is bad practice, the 'right' way is for many buffers to share an allocate
     // Could make own allocator or use the VulkanMemoryAllocator library (Red Kite recommended making own allocator remember)
 
@@ -1971,7 +1988,7 @@ void IBuffer::CopyBuffer(VkBuffer srcBuff, VkBuffer dstBuff, VkDeviceSize size)
     VkCommandBuffer commandBuffer = bufferManager.BeginSingleTimeCommands();
 
     // The copy info for..
-    VkBufferCopy copyInfo;
+    VkBufferCopy copyInfo{};
     copyInfo.srcOffset = 0; // Optional 
     copyInfo.dstOffset = 0; // Optional 
     copyInfo.size = size;
@@ -1987,7 +2004,7 @@ void ImageBuffer::CopyBuffer2Image(VkBuffer buffer, VkImage image, uint32_t widt
 
     VkCommandBuffer commandBuffer = bufferManager.BeginSingleTimeCommands();
 
-    VkBufferImageCopy region;
+    VkBufferImageCopy region{};
     region.bufferOffset = 0;        // Where the pixel values start
     region.bufferRowLength = 0;     // How the pixels are laid out in memory
     region.bufferImageHeight = 0;   // 0 means there is no padding out 
@@ -2012,7 +2029,7 @@ void ImageBuffer::CreateImageBuffer(uint32_t width, uint32_t height, VkFormat fo
     VkMemoryPropertyFlags properties, uint8_t mipLevels, VkSampleCountFlagBits sampleCount)
 {
     // To make an image we need an info struct (classic Vulkan stuff)
-    VkImageCreateInfo imageInfo;
+    VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.pNext = nullptr;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -2031,7 +2048,8 @@ void ImageBuffer::CreateImageBuffer(uint32_t width, uint32_t height, VkFormat fo
 
     // Make our image using the info specified
     // Possible for VK_FORMAT_R8G8B8A8_SRGB to not be supported but uncommon
-    assert(vkCreateImage(InstanceManager::Instance().GetDevice(), &imageInfo, nullptr, &m_image) == VK_SUCCESS);
+    VkResult retCode = vkCreateImage(InstanceManager::Instance().GetDevice(), &imageInfo, nullptr, &m_image);
+    assert(("vkCreateImage failed", retCode == VK_SUCCESS));
 
     AllocateBindBuffer<VkImage>(properties, m_image, GetBufferMemory(), vkGetImageMemoryRequirements, vkBindImageMemory);
 }
@@ -2063,7 +2081,8 @@ void ImageBuffer::CreateImageViews(VkFormat format, VkImageAspectFlags aspectFla
     createInfo.subresourceRange.baseArrayLayer = 0;
     createInfo.subresourceRange.layerCount = 1;
 
-    assert(vkCreateImageView(InstanceManager::Instance().GetDevice(), &createInfo, nullptr, &m_imageView) == VK_SUCCESS);
+    VkResult retCode = vkCreateImageView(InstanceManager::Instance().GetDevice(), &createInfo, nullptr, &m_imageView);
+    assert(("vkCreateImageView failed", retCode == VK_SUCCESS));
 
 }
 
@@ -2290,7 +2309,6 @@ void HelloTriangleApplication::DrawFrame()
     submitInfo.pSignalSemaphores = signalSemaphores;
 
     result = vkQueueSubmit(m_instanceManager.GetGraphicsQueue(), 1, &submitInfo, m_syncManager.GetInFlightFences()[m_currentFrame]);
-
     assert(result == VK_SUCCESS);
 
     // Submit the results back to the swap chain
